@@ -20,14 +20,9 @@
 import sys
 from pathlib import Path
 
-import pytest
-from fastapi.testclient import TestClient
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import llm_adapter, security  # noqa: E402
-from app.config import Settings, reset_settings  # noqa: E402
-from app.main import create_app  # noqa: E402
 from app.swarm import PublishRequest, SwarmService, default_topology  # noqa: E402
 
 
@@ -102,35 +97,6 @@ def test_compressor_truck_in_sports_car_out():
     assert car["tokens_after"] < car["tokens_before"]
     assert car["compression_ratio"] > 1
     assert 1 <= len(car["key_points"]) <= 5
-
-
-@pytest.fixture()
-def highway_client(monkeypatch):
-    monkeypatch.setenv("SUPABASE_URL", "https://test.supabase.co")
-    monkeypatch.setenv("SUPABASE_KEY", "test-key")
-    reset_settings()
-    app = create_app()
-    app.state.settings = Settings(_env_file=None)
-    app.state.swarming = None
-    from app.service import VotingService
-
-    class _Votes:
-        def has_active_subscription(self, user_id: str) -> bool:
-            return True
-
-        def has_existing_vote(self, user_id: str, mix_id: str) -> bool:
-            return False
-
-        def cast_vote_rpc(self, user_id: str, mix_id: str) -> dict:
-            return {"vote_count": 1}
-
-        def get_rankings(self, limit: int) -> list[dict]:
-            return [{"mix_id": "golden-hour-berko-4k", "title": "Berko", "votes": 1, "rank": 1}]
-
-    app.state.voting_service = VotingService(app.state.settings, _Votes())  # type: ignore[arg-type]
-    with TestClient(app) as client:
-        yield client
-    reset_settings()
 
 
 def test_highway_endpoints_cycle(highway_client):

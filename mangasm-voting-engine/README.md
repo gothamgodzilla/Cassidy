@@ -17,7 +17,13 @@ Follow Berko: [Spotify](https://open.spotify.com/artist/5Lrm3iLbY5LEsjXecGd83x?s
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/v1/swarm/audio/vote` | Cast a vote (`user_id`, `mix_id`) |
+| `POST` | `/api/v1/swarm/audio/vote` | Cast a vote (`user_id`, `mix_id`) — also feeds a `mix-voter` vector into the ring |
+| `GET` | `/api/v1/swarm/topology` | Ring topology |
+| `POST` | `/api/v1/swarm/state` | Publish a signed state vector |
+| `GET` | `/api/v1/swarm/state/next` | Catch next vector (peek, FIFO) |
+| `GET` | `/api/v1/swarm/state/latest` | Newest vector by agent (audit read) |
+| `POST` | `/api/v1/swarm/compress` | History → tunnel-ready vector |
+| `GET` | `/api/v1/security/ozone` | Ozone v0 status |
 | `GET` | `/api/v1/health` | Liveness probe |
 
 ## Quickstart
@@ -126,3 +132,25 @@ in logs. v1 path: AES-256-GCM with KMS-wrapped per-loop keys.
 **Frontend** (`/`, `frontend/`): dark-luxury Wingman.OS console — live
 25SHA cache simulation, audio-reactive BPM metronome (WebAudio + canvas,
 one-click beat publish), vote panel, and ring visualizer with live tunnel feed.
+
+## End product — run it all
+
+No credentials needed for the offline loop:
+
+```bash
+python3 demo_ring.py   # full cycle: topology → compress → publish ×4 → catch → vote → ring feed
+```
+
+Distribution (bring your own secrets — nothing is bundled):
+
+```bash
+cp .env.example .env   # SUPABASE_URL, SUPABASE_KEY, OZONE_HMAC_KEY (or OZONE_HMAC_KEYS for rotation)
+docker compose up --build            # API on :8000
+docker compose --profile llm up      # + Ollama sidecar for Llama 3 / Qwen ring nodes
+```
+
+Accepted votes automatically publish a `mix-voter` state vector, so the
+ring (and the visual-mascot episode) reacts to live crowd energy without
+any extra calls. Rotation: `OZONE_HMAC_KEYS` holds every active credential
+(`kid:key` pairs); new vectors sign with the first, verification accepts any,
+so pre-rotation vectors keep validating until you drop the old key.

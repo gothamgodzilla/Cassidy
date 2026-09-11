@@ -44,14 +44,45 @@ _SENSITIVE_KEYS = {"supabase_key", "api_key", "token", "authorization", "secret"
 
 
 def get_ozone_key() -> tuple[str, bool]:
-    """Return (key, is_dev_fallback). Prefers OZONE_HMAC_KEY, falls back to SUPABASE_KEY."""
+    """Return (primary key, is_dev_fallback). Prefers OZONE_HMAC_KEY, falls back to SUPABASE_KEY."""
+    keys = get_ozone_keys()
+    return keys[0][1], keys[0][2]
+
+
+def _kid_for(key: str) -> str:
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:8]
+
+
+def get_ozone_keys() -> list[tuple[str, str, bool]]:
+    """All active ozone keys as (kid, key, is_dev) — primary first.
+
+    Supports rotation across multiple active credentials:
+      OZONE_HMAC_KEYS="kid-new:AAAA,kid-old:BBBB"  (comma-separated; kid prefix optional)
+    Falls back to OZONE_HMAC_KEY, then SUPABASE_KEY, then an insecure dev key.
+    New vectors are signed with the primary; verification tries every active key
+    so vectors sealed before rotation still validate.
+    """
+    raw = os.environ.get("OZONE_HMAC_KEYS", "").strip()
+    if raw:
+        entries: list[tuple[str, str, bool]] = []
+        for item in raw.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            if ":" in item:
+                kid, _, key = item.partition(":")
+                entries.append((kid.strip() or _kid_for(key.strip()), key.strip(), False))
+            else:
+                entries.append((_kid_for(item), item, False))
+        if entries:
+            return entries
     key = os.environ.get("OZONE_HMAC_KEY", "").strip()
     if key:
-        return key, False
+        return [(_kid_for(key), key, False)]
     fallback = os.environ.get("SUPABASE_KEY", "").strip()
     if fallback:
-        return fallback, True
-    return "dev-only-insecure-ozone-key", True
+        return [(_kid_for(fallback), fallback, True)]
+    return [("dev", "dev-only-insecure-ozone-key", True)]
 
 
 def sha25(data: str | bytes) -> str:
@@ -67,12 +98,16 @@ def canonical_json(payload: dict[str, Any]) -> str:
 
 
 def sign_vector(payload: dict[str, Any], key: str | None = None) -> dict[str, Any]:
-    """Wrap ``payload`` in a signed ozone envelope."""
-    secret = key if key is not None else get_ozone_key()[0]
+    """Wrap ``payload`` in a signed ozone envelope (signed with the primary key)."""
+    if key is not None:
+        secret, kid = key, _kid_for(key)
+    else:
+        kid, secret, _ = get_ozone_keys()[0]
     body = canonical_json(payload)
     sig = hmac.new(secret.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
     return {
         "alg": OZONE_ALG,
+        "kid": kid,
         "sig": sig,
         "seal": sha25(body),
         "payload": payload,
@@ -80,11 +115,26 @@ def sign_vector(payload: dict[str, Any], key: str | None = None) -> dict[str, An
 
 
 def verify_vector(envelope: dict[str, Any], key: str | None = None) -> bool:
-    """Verify an ozone envelope with constant-time comparison."""
+    """Verify an ozone envelope with constant-time comparison.
+
+    With an explicit key, only that key is tried. Otherwise every active
+    rotation key is tried (kid match first), so pre-rotation vectors validate.
+    """
     try:
         payload = envelope["payload"]
-        expected = sign_vector(payload, key)["sig"]
-        return hmac.compare_digest(expected, str(envelope.get("sig", "")))
+        body = canonical_json(payload)
+        if key is not None:
+            candidates = [key]
+        else:
+            keys = get_ozone_keys()
+            ordered = sorted(keys, key=lambda k: k[0] != envelope.get("kid"))
+            candidates = [k for _, k, _ in ordered]
+        presented = str(envelope.get("sig", ""))
+        for candidate in candidates:
+            expected = hmac.new(candidate.encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+            if hmac.compare_digest(expected, presented):
+                return True
+        return False
     except Exception:
         logger.warning("ozone verification failed: malformed envelope")
         return False

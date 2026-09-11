@@ -60,6 +60,7 @@ class StateVector(BaseModel):
     key_points: list[str] = Field(default_factory=list, max_length=8)
     next_action: str = Field(default="", max_length=1_000)
     cache_seal: str = Field(default="", max_length=128)
+    kid: str = Field(default="", max_length=64)
     sig: str = Field(default="", max_length=256)
 
     @field_validator("key_points")
@@ -146,6 +147,7 @@ class SwarmService:
             key_points=payload["key_points"],
             next_action=payload["next_action"],
             cache_seal=payload["cache_seal"],
+            kid=envelope["kid"],
             sig=envelope["sig"],
         )
         self._queues[loop_key].append(vector)
@@ -163,6 +165,14 @@ class SwarmService:
         queue = self._queues.get(loop_id, deque())
         for vector in queue:
             if vector.agent_id != agent_id:
+                return vector
+        return None
+
+    def latest_by(self, agent_id: str, loop_id: str = RING_LOOP_ID) -> StateVector | None:
+        """Newest vector authored by ``agent_id`` (audit trail read)."""
+        queue = self._queues.get(loop_id, deque())
+        for vector in reversed(queue):
+            if vector.agent_id == agent_id:
                 return vector
         return None
 

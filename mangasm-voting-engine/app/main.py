@@ -139,7 +139,7 @@ def create_app() -> FastAPI:
                 content={"detail": "user_id and mix_id must not be blank"},
             )
         try:
-            return voting_service(request).cast_vote(payload.user_id, payload.mix_id)
+            result = voting_service(request).cast_vote(payload.user_id, payload.mix_id)
         except NotMemberError as exc:
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -167,6 +167,25 @@ def create_app() -> FastAPI:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={"detail": "Voting service unavailable"},
             )
+        # Close the loop: feed the counted vote into the ring as a mix-voter
+        # vector so downstream nodes (visual-mascot) react to crowd energy.
+        # Best-effort — a tunnel hiccup must never fail an accepted vote.
+        try:
+            swarm_service(request).publish(
+                PublishRequest(
+                    agent_id="mix-voter",
+                    summary=f"Vote counted for {result.mix_id}: {result.vote_count} total.",
+                    key_points=[f"{result.mix_id}={result.vote_count}"],
+                    next_action="visual-mascot: ride this crowd energy in the next episode beat.",
+                )
+            )
+        except Exception:
+            logger.warning(
+                "swarm feed failed after accepted vote user_id=%s mix_id=%s",
+                payload.user_id,
+                payload.mix_id,
+            )
+        return result
 
     @app.get(
         "/api/v1/swarm/topology",
@@ -215,9 +234,24 @@ def create_app() -> FastAPI:
             return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
         return vector
 
-    @app.post(
-        "/api/v1/swarm/compress",
+    @app.get(
+        "/api/v1/swarm/state/latest",
         responses={400: {"model": ErrorResponse, "description": "Invalid input"}},
+        summary="Newest vector authored by an agent (audit read)",
+    )
+    async def latest_state(agent_id: str, request: Request, loop_id: str = "golden-hour-ring"):
+        if not agent_id.strip():
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "agent_id must not be blank"},
+            )
+        vector = swarm_service(request).latest_by(agent_id.strip(), loop_id.strip())
+        if vector is None:
+            return JSONResponse(status_code=status.HTTP_204_NO_CONTENT, content=None)
+        return vector
+
+    @app.post(
+        "/api/v1/swarm/compress",        responses={400: {"model": ErrorResponse, "description": "Invalid input"}},
         summary="Compress a heavy history into a tunnel-ready sports car",
     )
     async def compress(payload: CompressRequest):
