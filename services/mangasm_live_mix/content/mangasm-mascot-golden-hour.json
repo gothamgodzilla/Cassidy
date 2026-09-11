@@ -1,0 +1,26 @@
+{
+  "_license": "Apache-2.0; see the repository LICENSE.txt file",
+  "channel": "mangasm.mascot",
+  "event": {
+    "type": "episode_premiere",
+    "audience": "all welcome",
+    "experience_url": "https://mangasm.app"
+  },
+  "title": "Golden Hour Progressive House & Melodic Techno DJ Set",
+  "description": "This DJ set captures the exact deep trance and melodic techno vibe perfect for fueling the Friday and Saturday live SoundCloud sessions on the platform.",
+  "video": {
+    "title": "Berko - Golden Hour Progressive House | 4K DJ Set",
+    "creator": "Berko",
+    "views": 677,
+    "caption": "Excited to share my new DJ set with you.\n\nA golden hour session moving through progressive house & melodic sounds with some of my new & unreleased music.\n\nHope you enjoy it. Let me know your favorite track in the comments and subscribe for more music 🤍"
+  },
+  "djs": [
+    "MATRYXX",
+    "BERKO"
+  ],
+  "follow_berko": {
+    "spotify": "https://open.spotify.com/artist/5Lrm3iLbY5LEsjXecGd83x?si=c81J_cGATNOv73L1-I6t8w",
+    "soundcloud": "https://soundcloud.com/sapir-berko",
+    "instagram": "https://www.instagram.com/berko_ofc"
+  }
+}
