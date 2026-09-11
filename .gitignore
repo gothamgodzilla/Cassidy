@@ -93,6 +93,10 @@ doc/modules/cassandra/examples/TEXT/NODETOOL/
 # Python virtual environment
 venv/
 
+# Wingman.OS voting engine (wingman-os/)
+wingman-os/.env
+wingman-os/.venv/
+
 # build-scripts will put cassandra-builds into the directory
 cassandra-builds/
 cassandra-dtest/
