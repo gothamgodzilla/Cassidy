@@ -1,0 +1,6 @@
+# Runtime dependencies for the Mangasm+ Live Mix Voting Engine.
+# This service is self-contained and shares no dependencies with the
+# Cassandra build; see README.md.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+httpx>=0.27,<0.29
