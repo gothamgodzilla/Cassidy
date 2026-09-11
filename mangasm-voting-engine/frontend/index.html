@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!--
+ Licensed to the Apache Software Foundation (ASF) under one
+ or more contributor license agreements.  See the NOTICE file
+ distributed with this work for additional information
+ regarding copyright ownership.  The ASF licenses this file
+ to you under the Apache License, Version 2.0 (the
+ "License"); you may not use this file except in compliance
+ with the License.  You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing,
+ software distributed under the License is distributed on an
+ "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ KIND, either express or implied.  See the License for the
+ specific language governing permissions and limitations
+ under the License.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Wingman.OS — Mangasm+ Live Mix Console</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header class="masthead">
+  <div class="brand">
+    <div class="wordmark">WINGMAN<span>.OS</span></div>
+    <div class="tagline">Mangasm+ Live Mix Console · Golden Hour</div>
+  </div>
+  <div class="chips">
+    <span id="ozone-chip" class="chip">ozone: …</span>
+    <span id="health-chip" class="chip">backend: …</span>
+  </div>
+</header>
+
+<main class="grid">
+  <section class="card hero">
+    <h1>Golden Hour Progressive House &amp; Melodic Techno</h1>
+    <p class="sub">Berko — Golden Hour Progressive House | 4K DJ Set · fueling the Friday &amp; Saturday live SoundCloud sessions</p>
+    <p class="djs">DJ: MATRYXX &amp; BERKO · <a href="https://mangasm.app">mangasm.mascot episode premiere — online visual experience for all, welcome at mangasm.app</a></p>
+    <div class="links">
+      <a href="https://open.spotify.com/artist/5Lrm3iLbY5LEsjXecGd83x?si=c81J_cGATNOv73L1-I6t8w">Spotify</a>
+      <a href="https://soundcloud.com/sapir-berko">SoundCloud</a>
+      <a href="https://www.instagram.com/berko_ofc">Instagram</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Live 25SHA Cache Simulation</h2>
+    <p class="hint">25-round SHA-256 chain seal — the same seal the tunnel stamps on every state vector.</p>
+    <div class="row">
+      <input id="sha-input" type="text" value="golden-hour-berko-4k:mplus-user-1" maxlength="256" />
+      <button id="sha-run">Seal it</button>
+    </div>
+    <ol id="sha-rounds" class="rounds"></ol>
+    <div id="sha-result" class="mono"></div>
+  </section>
+
+  <section class="card">
+    <h2>Audio-Reactive BPM Metronome</h2>
+    <div class="row">
+      <label>BPM <input id="bpm" type="range" min="60" max="180" value="122" /> <span id="bpm-val">122</span></label>
+      <button id="metro-toggle">Start</button>
+    </div>
+    <canvas id="metro-canvas" width="520" height="160"></canvas>
+    <p class="hint">Each beat pulse is offered to the ring as a <span class="mono">bpm-metronome</span> state vector.</p>
+    <div class="row">
+      <button id="metro-publish">Publish beat to tunnel</button>
+      <span id="metro-status" class="mono"></span>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Cast a Vote</h2>
+    <div class="row">
+      <input id="vote-user" type="text" placeholder="user_id (Mangasm+)" value="mplus-user-1" />
+      <input id="vote-mix" type="text" placeholder="mix_id" value="golden-hour-berko-4k" />
+      <button id="vote-btn">Vote</button>
+    </div>
+    <div id="vote-result" class="mono"></div>
+    <ol id="rankings"></ol>
+  </section>
+
+  <section class="card wide">
+    <h2>Agent Highway — Ring Topology</h2>
+    <svg id="ring" viewBox="0 0 520 240" role="img" aria-label="agent ring"></svg>
+    <div class="row">
+      <input id="vec-agent" type="text" value="sha-cache" />
+      <input id="vec-summary" type="text" value="Cache sealed 3 payloads; hit rate 0.92" />
+      <button id="vec-publish">Publish vector</button>
+      <button id="vec-catch">Catch next (mix-voter)</button>
+    </div>
+    <ol id="tunnel-feed" class="mono feed"></ol>
+  </section>
+</main>
+
+<footer>Wingman.OS Core · FastAPI · Supabase pgvector tunnel · ozone v0 sealed</footer>
+<script src="/app.js"></script>
+</body>
+</html>

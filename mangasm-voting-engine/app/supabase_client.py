@@ -189,3 +189,65 @@ class SupabaseClient:
                 )
             return ranked
         raise UpstreamError(f"rankings returned {response.status_code}: {response.text[:500]}")
+
+    # -- Swarm tunnel (Phase A): state vectors over Supabase + pgvector. ----
+
+    def publish_state_vector(self, vector: dict[str, Any]) -> dict[str, Any]:
+        """Persist a signed state vector; returns the inserted row."""
+        response = self._call(
+            "swarm-publish",
+            "POST",
+            "/rest/v1/swarm_state_vectors",
+            params={"select": "*"},
+            json={
+                "loop_id": vector.get("loop_id"),
+                "agent_id": vector.get("agent_id"),
+                "turn": vector.get("turn", 0),
+                "summary": vector.get("summary"),
+                "key_points": vector.get("key_points", []),
+                "next_action": vector.get("next_action", ""),
+                "cache_seal": vector.get("cache_seal", ""),
+                "sig": vector.get("sig", ""),
+                "embedding": vector.get("embedding"),
+            },
+        )
+        if response.status_code in (200, 201):
+            rows = response.json()
+            return rows[0] if isinstance(rows, list) and rows else {}
+        raise UpstreamError(f"swarm publish returned {response.status_code}: {response.text[:500]}")
+
+    def fetch_next_vector(self, agent_id: str, loop_id: str, limit: int = 1) -> list[dict[str, Any]]:
+        """Freshest tunnel vectors not authored by ``agent_id`` (tunnel catch)."""
+        response = self._call(
+            "swarm-next",
+            "GET",
+            "/rest/v1/swarm_state_vectors",
+            params={
+                "loop_id": f"eq.{loop_id}",
+                "agent_id": f"neq.{agent_id}",
+                "select": "*",
+                "order": "created_at.desc",
+                "limit": str(limit),
+            },
+        )
+        if response.status_code == 200:
+            return response.json()
+        raise UpstreamError(f"swarm next returned {response.status_code}: {response.text[:500]}")
+
+    def semantic_search_vectors(
+        self, embedding: list[float], loop_id: str, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """Cosine-similar vectors via the pgvector match RPC (tunnel recall)."""
+        response = self._call(
+            "swarm-match",
+            "POST",
+            "/rest/v1/rpc/match_state_vectors",
+            json={
+                "p_loop_id": loop_id,
+                "p_embedding": embedding,
+                "p_match_count": limit,
+            },
+        )
+        if response.status_code == 200:
+            return response.json()
+        raise UpstreamError(f"swarm match returned {response.status_code}: {response.text[:500]}")

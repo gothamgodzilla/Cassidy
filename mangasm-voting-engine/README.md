@@ -102,3 +102,27 @@ Built as a standard FastAPI service; `Dockerfile` runs
 `uvicorn app.main:app` as non-root on port 8000 with a
 `GET /api/v1/health` healthcheck. Set `SUPABASE_URL` / `SUPABASE_KEY`
 in the platform secret store.
+
+## Phase A — agent highway, ozone v0, frontend
+
+**Agent topology** (`GET /api/v1/swarm/topology`): a closed ring —
+`bpm-metronome → sha-cache → mix-voter → visual-mascot → …` — each node
+running a local model (Llama 3 / Qwen via Ollama).
+
+**Tunnel** (Supabase pgvector, `supabase/migrations/002_swarm_highway.sql`):
+nodes publish lightweight JSON state vectors (sports cars), never raw
+histories (heavy trucks).
+`POST /api/v1/swarm/state` publishes (HMAC-sealed, 25SHA-stamped);
+`GET /api/v1/swarm/state/next?agent_id=…` is how the next node catches;
+`match_state_vectors()` RPC gives cosine recall over `embedding`.
+`POST /api/v1/swarm/compress` reduces a chat history to a tunnel-ready
+payload offline (extractive heuristic; `OLLAMA_URL` payload builder included
+for continuing the cycle on a model server).
+
+**Ozone v0** (`GET /api/v1/security/ozone`, `app/security.py`): HMAC-SHA256
+envelopes on every vector, 25-round SHA-256 cache seals, secret redaction
+in logs. v1 path: AES-256-GCM with KMS-wrapped per-loop keys.
+
+**Frontend** (`/`, `frontend/`): dark-luxury Wingman.OS console — live
+25SHA cache simulation, audio-reactive BPM metronome (WebAudio + canvas,
+one-click beat publish), vote panel, and ring visualizer with live tunnel feed.

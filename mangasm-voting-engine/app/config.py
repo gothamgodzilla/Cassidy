@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     supabase_url: str = ""
     supabase_key: str = ""
+    ozone_hmac_key: str = ""
+    ollama_url: str = "http://localhost:11434"
     service_version: str = "1.0.0"
     max_retries: int = 3
     retry_base_delay_seconds: float = 0.25
