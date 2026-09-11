@@ -72,24 +72,26 @@ begin
             detail = jsonb_build_object('status', 400)::text;
     end if;
 
-    if not exists (
-        select 1
-        from public.mangasm_plus_subscriptions
-        where user_id = p_user_id
-          and status = 'active'
-          and (expires_at is null or expires_at > now())
-    ) then
+    perform 1
+    from public.mangasm_plus_subscriptions
+    where user_id = p_user_id
+      and status = 'active'
+      and (expires_at is null or expires_at > now())
+    for key share;
+
+    if not found then
         raise sqlstate 'PGRST' using
             message = jsonb_build_object('message', 'M+ Membership Required')::text,
             detail = jsonb_build_object('status', 403)::text;
     end if;
 
-    if not exists (
-        select 1
-        from public.live_mixes
-        where id = p_mix_id
-          and is_votable
-    ) then
+    perform 1
+    from public.live_mixes
+    where id = p_mix_id
+      and is_votable
+    for key share;
+
+    if not found then
         raise sqlstate 'PGRST' using
             message = jsonb_build_object('message', 'M+ Membership Required')::text,
             detail = jsonb_build_object('status', 403)::text;
