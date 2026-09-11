@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Annotated, Any, AsyncIterator
 from urllib.parse import urlparse
+from uuid import UUID
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -133,7 +134,9 @@ class VoteService:
     async def close(self) -> None:
         await self._client.close()
 
-    async def cast(self, vote: VoteRequest, access_token: str) -> dict[str, Any]:
+    async def cast(
+        self, vote: VoteRequest, access_token: str, operation_id: str
+    ) -> dict[str, Any]:
         try:
             authenticated_user_id = await self._client.authenticated_user_id(access_token)
         except SupabaseError as exc:
@@ -165,7 +168,9 @@ class VoteService:
             )
 
         try:
-            return await self._client.cast_vote(authenticated_user_id, vote.mix_id)
+            return await self._client.cast_vote(
+                authenticated_user_id, vote.mix_id, operation_id
+            )
         except SupabaseError as exc:
             if exc.status_code == status.HTTP_409_CONFLICT:
                 raise HTTPException(
@@ -233,6 +238,7 @@ def create_app(vote_service: VoteService | None = None) -> FastAPI:
         payload: VoteRequest,
         request: Request,
         authorization: Annotated[str | None, Header()] = None,
+        idempotency_key: Annotated[str | None, Header()] = None,
     ) -> VoteResponse:
         vote_timestamp = datetime.now(timezone.utc).isoformat()
         log_context = {
@@ -253,7 +259,16 @@ def create_app(vote_service: VoteService | None = None) -> FastAPI:
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="M+ Membership Required",
                 )
-            result = await request.app.state.vote_service.cast(payload, access_token)
+            try:
+                operation_id = str(UUID(idempotency_key or ""))
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Idempotency-Key must be a UUID",
+                ) from exc
+            result = await request.app.state.vote_service.cast(
+                payload, access_token, operation_id
+            )
             response = VoteResponse.model_validate(result)
         except SupabaseUnavailable as exc:
             LOGGER.exception("vote_external_service_failure", extra=log_context)

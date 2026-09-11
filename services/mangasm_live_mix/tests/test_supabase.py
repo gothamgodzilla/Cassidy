@@ -22,6 +22,8 @@ import httpx
 
 from app.supabase import SupabaseClient, SupabaseError, SupabaseUnavailable
 
+OPERATION_ID = "58bb881b-3360-42a6-819e-8e32fdcb1b85"
+
 
 def run(coroutine):
     return asyncio.run(coroutine)
@@ -70,6 +72,7 @@ def test_cast_vote_posts_rpc_parameters() -> None:
         assert payload["p_user_id"] == "member-1"
         assert payload["p_mix_id"] == "golden-hour"
         UUID(payload["p_operation_id"])
+        assert payload["p_operation_id"] == OPERATION_ID
         return httpx.Response(
             200,
             json={
@@ -85,7 +88,7 @@ def test_cast_vote_posts_rpc_parameters() -> None:
         transport=httpx.MockTransport(handler),
     )
     try:
-        result = run(client.cast_vote("member-1", "golden-hour"))
+        result = run(client.cast_vote("member-1", "golden-hour", OPERATION_ID))
     finally:
         run(client.close())
 
@@ -127,7 +130,7 @@ def test_transient_failure_is_retried_three_times() -> None:
     )
     try:
         try:
-            run(client.cast_vote("member-1", "golden-hour"))
+            run(client.cast_vote("member-1", "golden-hour", OPERATION_ID))
         except SupabaseUnavailable:
             pass
         else:
@@ -154,7 +157,7 @@ def test_conflict_is_not_retried() -> None:
     )
     try:
         try:
-            run(client.cast_vote("member-1", "golden-hour"))
+            run(client.cast_vote("member-1", "golden-hour", OPERATION_ID))
         except SupabaseError as exc:
             assert exc.status_code == 409
         else:

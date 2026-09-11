@@ -21,7 +21,12 @@ member.
 
 ```text
 Authorization: Bearer SUPABASE_ACCESS_TOKEN
+Idempotency-Key: 58bb881b-3360-42a6-819e-8e32fdcb1b85
 ```
+
+Generate one UUID per intended vote and reuse it whenever retrying the same HTTP
+request. Reusing it after a lost response returns the original committed vote
+result; a different key for an existing user/mix pair returns `409 Conflict`.
 
 ```json
 {
@@ -50,9 +55,10 @@ A successful response contains the atomically updated count and live queue:
 
 ## Database setup
 
-Apply `supabase/migrations/20260911172900_create_live_mix_voting.sql` to the
-target Supabase project. The migration creates the subscription, live-mix, and
-vote tables and the `cast_mix_vote` RPC.
+Apply the timestamped files in `supabase/migrations/` to the target Supabase
+project in order. They create the subscription, live-mix, and vote tables,
+install the `cast_mix_vote` RPC, and safely upgrade installations that applied
+the initial migration before retry hardening was added.
 
 The RPC performs the membership recheck, duplicate-protected vote insert,
 counter update, and ranking query in the same database transaction. Membership

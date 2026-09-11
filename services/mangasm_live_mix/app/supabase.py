@@ -23,7 +23,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
-from uuid import uuid4
 
 import httpx
 
@@ -106,7 +105,9 @@ class SupabaseClient:
             raise SupabaseUnavailable("Supabase returned an invalid subscription expiration")
         return expiration > datetime.now(timezone.utc)
 
-    async def cast_vote(self, user_id: str, mix_id: str) -> dict[str, Any]:
+    async def cast_vote(
+        self, user_id: str, mix_id: str, operation_id: str
+    ) -> dict[str, Any]:
         """Invoke the atomic vote RPC and return its response."""
 
         result = await self._request(
@@ -115,7 +116,7 @@ class SupabaseClient:
             {
                 "p_user_id": user_id,
                 "p_mix_id": mix_id,
-                "p_operation_id": str(uuid4()),
+                "p_operation_id": operation_id,
             },
         )
         if not isinstance(result, dict):

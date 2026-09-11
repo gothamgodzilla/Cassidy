@@ -23,7 +23,10 @@ from fastapi.testclient import TestClient
 from app.main import VoteRequest, VoteService, create_app
 from app.supabase import SupabaseUnavailable
 
-AUTHORIZATION = {"Authorization": "Bearer valid-access-token"}
+AUTHORIZATION = {
+    "Authorization": "Bearer valid-access-token",
+    "Idempotency-Key": "58bb881b-3360-42a6-819e-8e32fdcb1b85",
+}
 
 
 class StubVoteService:
@@ -34,7 +37,9 @@ class StubVoteService:
     async def close(self) -> None:
         self.closed = True
 
-    async def cast(self, _vote: VoteRequest, _access_token: str) -> dict[str, Any]:
+    async def cast(
+        self, _vote: VoteRequest, _access_token: str, _operation_id: str
+    ) -> dict[str, Any]:
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
@@ -52,7 +57,9 @@ class StubSupabaseClient:
         self.membership_checked = True
         return True
 
-    async def cast_vote(self, user_id: str, mix_id: str) -> dict[str, Any]:
+    async def cast_vote(
+        self, user_id: str, mix_id: str, _operation_id: str
+    ) -> dict[str, Any]:
         return {
             "mix_id": mix_id,
             "vote_count": 1,
@@ -169,6 +176,7 @@ def test_request_user_must_match_authenticated_identity() -> None:
             service.cast(
                 VoteRequest(user_id="member-1", mix_id="golden-hour"),
                 "valid-access-token",
+                "58bb881b-3360-42a6-819e-8e32fdcb1b85",
             )
         )
     except HTTPException as exc:
@@ -178,3 +186,16 @@ def test_request_user_must_match_authenticated_identity() -> None:
         raise AssertionError("expected HTTPException")
 
     assert not client.membership_checked
+
+
+def test_missing_idempotency_key_is_bad_request() -> None:
+    service = StubVoteService({})
+    with TestClient(create_app(service)) as client:
+        response = client.post(
+            "/api/v1/swarm/audio/vote",
+            json={"user_id": "member-1", "mix_id": "golden-hour"},
+            headers={"Authorization": "Bearer valid-access-token"},
+        )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Idempotency-Key must be a UUID"}
