@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
+from uuid import uuid4
 
 import httpx
 
@@ -68,6 +69,19 @@ class SupabaseClient:
 
         await self._client.aclose()
 
+    async def authenticated_user_id(self, access_token: str) -> str:
+        """Validate a Supabase access token and return its subject."""
+
+        user = await self._request(
+            "GET",
+            "/auth/v1/user",
+            headers={"authorization": f"Bearer {access_token}"},
+        )
+        user_id = user.get("id") if isinstance(user, dict) else None
+        if not isinstance(user_id, str) or not user_id:
+            raise SupabaseUnavailable("Supabase Auth returned an invalid user")
+        return user_id
+
     async def active_subscription(self, user_id: str) -> bool:
         """Return whether a current active Mangasm+ subscription exists."""
 
@@ -98,19 +112,32 @@ class SupabaseClient:
         result = await self._request(
             "POST",
             "/rest/v1/rpc/cast_mix_vote",
-            {"p_user_id": user_id, "p_mix_id": mix_id},
+            {
+                "p_user_id": user_id,
+                "p_mix_id": mix_id,
+                "p_operation_id": str(uuid4()),
+            },
         )
         if not isinstance(result, dict):
             raise SupabaseUnavailable("cast_mix_vote returned an invalid response")
         return result
 
     async def _request(
-        self, method: str, path: str, json: dict[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        json: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> Any:
         last_error: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                response = await self._client.request(method, f"{self._base_url}{path}", json=json)
+                response = await self._client.request(
+                    method,
+                    f"{self._base_url}{path}",
+                    json=json,
+                    headers=headers,
+                )
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last_error = exc
             else:

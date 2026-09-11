@@ -15,6 +15,8 @@
 # limitations under the License.
 
 import asyncio
+import json
+from uuid import UUID
 
 import httpx
 
@@ -64,7 +66,10 @@ def test_cast_vote_posts_rpc_parameters() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/rest/v1/rpc/cast_mix_vote"
         assert request.method == "POST"
-        assert request.content == b'{"p_user_id":"member-1","p_mix_id":"golden-hour"}'
+        payload = json.loads(request.content)
+        assert payload["p_user_id"] == "member-1"
+        assert payload["p_mix_id"] == "golden-hour"
+        UUID(payload["p_operation_id"])
         return httpx.Response(
             200,
             json={
@@ -87,12 +92,32 @@ def test_cast_vote_posts_rpc_parameters() -> None:
     assert result["vote_count"] == 1
 
 
+def test_authenticated_user_uses_callers_access_token() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/auth/v1/user"
+        assert request.headers["authorization"] == "Bearer caller-access-token"
+        assert request.headers["apikey"] == "secret"
+        return httpx.Response(200, json={"id": "member-1"})
+
+    client = SupabaseClient(
+        "https://example.supabase.co",
+        "secret",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        assert run(client.authenticated_user_id("caller-access-token")) == "member-1"
+    finally:
+        run(client.close())
+
+
 def test_transient_failure_is_retried_three_times() -> None:
     attempts = 0
+    operation_ids: list[str] = []
 
-    async def handler(_request: httpx.Request) -> httpx.Response:
+    async def handler(request: httpx.Request) -> httpx.Response:
         nonlocal attempts
         attempts += 1
+        operation_ids.append(json.loads(request.content)["p_operation_id"])
         return httpx.Response(503, json={"message": "unavailable"})
 
     client = SupabaseClient(
@@ -111,6 +136,7 @@ def test_transient_failure_is_retried_three_times() -> None:
         run(client.close())
 
     assert attempts == 4
+    assert len(set(operation_ids)) == 1
 
 
 def test_conflict_is_not_retried() -> None:

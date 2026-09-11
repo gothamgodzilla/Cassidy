@@ -24,10 +24,10 @@ import os
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator
+from typing import Annotated, Any, AsyncIterator
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -78,8 +78,8 @@ class Settings:
         url = os.getenv("SUPABASE_URL", "").strip()
         key = os.getenv("SUPABASE_KEY", "").strip()
         parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise RuntimeError("SUPABASE_URL must be a valid HTTP(S) URL")
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise RuntimeError("SUPABASE_URL must be a valid HTTPS URL")
         if not key:
             raise RuntimeError("SUPABASE_KEY is required")
         return cls(url, key)
@@ -133,9 +133,28 @@ class VoteService:
     async def close(self) -> None:
         await self._client.close()
 
-    async def cast(self, vote: VoteRequest) -> dict[str, Any]:
+    async def cast(self, vote: VoteRequest, access_token: str) -> dict[str, Any]:
         try:
-            active_subscription = await self._client.active_subscription(vote.user_id)
+            authenticated_user_id = await self._client.authenticated_user_id(access_token)
+        except SupabaseError as exc:
+            if exc.status_code in {
+                status.HTTP_401_UNAUTHORIZED,
+                status.HTTP_403_FORBIDDEN,
+            }:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="M+ Membership Required",
+                ) from exc
+            raise SupabaseUnavailable("Supabase rejected the identity check") from exc
+
+        if authenticated_user_id != vote.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="M+ Membership Required",
+            )
+
+        try:
+            active_subscription = await self._client.active_subscription(authenticated_user_id)
         except SupabaseError as exc:
             raise SupabaseUnavailable("Supabase rejected the membership check") from exc
 
@@ -146,7 +165,7 @@ class VoteService:
             )
 
         try:
-            return await self._client.cast_vote(vote.user_id, vote.mix_id)
+            return await self._client.cast_vote(authenticated_user_id, vote.mix_id)
         except SupabaseError as exc:
             if exc.status_code == status.HTTP_409_CONFLICT:
                 raise HTTPException(
@@ -210,7 +229,11 @@ def create_app(vote_service: VoteService | None = None) -> FastAPI:
             500: {"description": "Supabase unavailable"},
         },
     )
-    async def cast_vote(payload: VoteRequest, request: Request) -> VoteResponse:
+    async def cast_vote(
+        payload: VoteRequest,
+        request: Request,
+        authorization: Annotated[str | None, Header()] = None,
+    ) -> VoteResponse:
         vote_timestamp = datetime.now(timezone.utc).isoformat()
         log_context = {
             "user_id": payload.user_id,
@@ -218,7 +241,19 @@ def create_app(vote_service: VoteService | None = None) -> FastAPI:
             "vote_timestamp": vote_timestamp,
         }
         try:
-            result = await request.app.state.vote_service.cast(payload)
+            if authorization is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="M+ Membership Required",
+                )
+            scheme, separator, access_token = authorization.partition(" ")
+            access_token = access_token.strip()
+            if scheme.lower() != "bearer" or not separator or not access_token:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="M+ Membership Required",
+                )
+            result = await request.app.state.vote_service.cast(payload, access_token)
             response = VoteResponse.model_validate(result)
         except SupabaseUnavailable as exc:
             LOGGER.exception("vote_external_service_failure", extra=log_context)

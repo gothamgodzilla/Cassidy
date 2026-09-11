@@ -15,6 +15,14 @@ subscription and delegates the vote write to one PostgreSQL transaction.
 
 `POST /api/v1/swarm/audio/vote`
 
+The caller must send a valid Supabase access token. The token's verified user ID
+must match `user_id`; the request body cannot be used to impersonate another
+member.
+
+```text
+Authorization: Bearer SUPABASE_ACCESS_TOKEN
+```
+
 ```json
 {
   "user_id": "member-123",
@@ -47,9 +55,11 @@ target Supabase project. The migration creates the subscription, live-mix, and
 vote tables and the `cast_mix_vote` RPC.
 
 The RPC performs the membership recheck, duplicate-protected vote insert,
-counter update, and ranking query in the same database transaction. Table RLS
-is enabled, direct anonymous/authenticated access is revoked, and RPC execution
-is restricted to the server-side `service_role`.
+counter update, and ranking query in the same database transaction. Membership
+and mix rows are locked against revocation during the transaction. A generated
+operation ID makes retries idempotent if a response is lost after commit. Table
+RLS is enabled, direct anonymous/authenticated access is revoked, and RPC
+execution is restricted to the server-side `service_role`.
 
 Load subscriptions and Friday/Saturday mixes before enabling traffic. The
 `content/mangasm-mascot-golden-hour.json` file contains the supplied Golden Hour
@@ -65,8 +75,10 @@ SUPABASE_KEY=SERVER_SIDE_SECRET_OR_SERVICE_ROLE_KEY
 ```
 
 `SUPABASE_KEY` bypasses RLS and must never be exposed to clients. Restrict this
-endpoint to the trusted Wingman trigger or place authenticated API middleware
-in front of it; a caller-supplied `user_id` is not proof of identity.
+credential to this service and rotate it through the secret manager. The
+service requires TLS for Supabase, validates each caller's access token, and
+binds the vote to that verified identity. Apply rate limits at the Wingman
+ingress using the verified principal.
 
 Build and run:
 

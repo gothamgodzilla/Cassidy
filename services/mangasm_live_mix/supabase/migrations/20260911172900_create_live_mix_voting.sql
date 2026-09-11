@@ -35,6 +35,7 @@ create table if not exists public.live_mixes (
 create table if not exists public.mix_votes (
     user_id text not null references public.mangasm_plus_subscriptions (user_id),
     mix_id text not null references public.live_mixes (id),
+    operation_id uuid not null unique,
     voted_at timestamptz not null default now(),
     primary key (user_id, mix_id)
 );
@@ -54,7 +55,13 @@ grant select on table public.mangasm_plus_subscriptions to service_role;
 grant select, update on table public.live_mixes to service_role;
 grant select, insert on table public.mix_votes to service_role;
 
-create or replace function public.cast_mix_vote(p_user_id text, p_mix_id text)
+drop function if exists public.cast_mix_vote(text, text);
+
+create or replace function public.cast_mix_vote(
+    p_user_id text,
+    p_mix_id text,
+    p_operation_id uuid
+)
 returns jsonb
 language plpgsql
 security invoker
@@ -62,11 +69,13 @@ set search_path = ''
 as $$
 declare
     inserted_vote boolean;
+    replayed_operation boolean;
     updated_vote_count bigint;
     rankings jsonb;
 begin
     if p_user_id is null or btrim(p_user_id) = ''
-       or p_mix_id is null or btrim(p_mix_id) = '' then
+       or p_mix_id is null or btrim(p_mix_id) = ''
+       or p_operation_id is null then
         raise sqlstate 'PGRST' using
             message = jsonb_build_object('message', 'Invalid input')::text,
             detail = jsonb_build_object('status', 400)::text;
@@ -77,7 +86,7 @@ begin
     where user_id = p_user_id
       and status = 'active'
       and (expires_at is null or expires_at > now())
-    for key share;
+    for share;
 
     if not found then
         raise sqlstate 'PGRST' using
@@ -89,7 +98,7 @@ begin
     from public.live_mixes
     where id = p_mix_id
       and is_votable
-    for key share;
+    for share;
 
     if not found then
         raise sqlstate 'PGRST' using
@@ -98,8 +107,8 @@ begin
     end if;
 
     with inserted as (
-        insert into public.mix_votes (user_id, mix_id)
-        values (p_user_id, p_mix_id)
+        insert into public.mix_votes (user_id, mix_id, operation_id)
+        values (p_user_id, p_mix_id, p_operation_id)
         on conflict (user_id, mix_id) do nothing
         returning true
     )
@@ -108,15 +117,30 @@ begin
     from inserted;
 
     if not inserted_vote then
-        raise sqlstate 'PGRST' using
-            message = jsonb_build_object('message', 'User already voted for this mix')::text,
-            detail = jsonb_build_object('status', 409)::text;
+        select operation_id = p_operation_id
+        into replayed_operation
+        from public.mix_votes
+        where user_id = p_user_id
+          and mix_id = p_mix_id;
+
+        if not coalesce(replayed_operation, false) then
+            raise sqlstate 'PGRST' using
+                message = jsonb_build_object('message', 'User already voted for this mix')::text,
+                detail = jsonb_build_object('status', 409)::text;
+        end if;
     end if;
 
-    update public.live_mixes
-    set vote_count = vote_count + 1
-    where id = p_mix_id
-    returning vote_count into updated_vote_count;
+    if inserted_vote then
+        update public.live_mixes
+        set vote_count = vote_count + 1
+        where id = p_mix_id
+        returning vote_count into updated_vote_count;
+    else
+        select vote_count
+        into updated_vote_count
+        from public.live_mixes
+        where id = p_mix_id;
+    end if;
 
     with ranked as (
         select
@@ -148,5 +172,6 @@ begin
 end;
 $$;
 
-revoke execute on function public.cast_mix_vote(text, text) from public, anon, authenticated;
-grant execute on function public.cast_mix_vote(text, text) to service_role;
+revoke execute on function public.cast_mix_vote(text, text, uuid)
+    from public, anon, authenticated;
+grant execute on function public.cast_mix_vote(text, text, uuid) to service_role;
