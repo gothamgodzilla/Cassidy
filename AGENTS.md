@@ -7,10 +7,12 @@ Apache Cassandra is a NoSQL distributed database. This is the official Git repos
 
 ## Environment
 
-- Java 11 (default), 17, 21.
-- Python 3 for `cqlsh` and dtests.
-- Apache Ant >= 1.10 for all builds. Do NOT attempt to use Maven, Gradle, or any other build tool. Cassandra uses Ant exclusively.
+- Java 11 (default), 17, 21. `java.default` in `build.xml` is 11.
+- Python 3.6–3.13 for `cqlsh` and dtests.
+- Apache Ant >= 1.10 and `ant-optional` for all builds. Do NOT attempt to use Maven, Gradle, or any other build tool. Cassandra uses Ant exclusively (the Accord submodule is built by its Gradle wrapper from the Ant build).
+- Initialize the Accord git submodule before the first build: `git submodule update --init --recursive`.
 - Do NOT attempt to install dependencies, every dependency requires OSS community approval first.
+- `bin/cassandra` sizes the heap to half of system RAM. Set `MAX_HEAP_SIZE` (for example `512M`) when starting a local node on a machine that is also running the build.
 
 ## Build
 
